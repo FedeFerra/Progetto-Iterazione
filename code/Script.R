@@ -534,3 +534,39 @@ arrows(1:32+0.4, rep(0,32),1:32+0.4, dati.new$pred.r.s2, col=4,angle = 0, code =
 axis(1,1:32,rep(rev(letters[1:8]),4))
 
 as.vector(apply(dati.prova, 1, function(y) gauss.hermite(function(x) llik.frailty.obs(c(mle.frailty$par, x), y), mu = 0, sd = 1, order = 9)))
+
+#EM-ish
+llik.frailty.sigma <- function(param, data, sigma){
+  sum(as.vector(apply(data, 1, function(y) gauss.hermite(function(x) llik.frailty.obs(c(param, x), y), mu = 0, sd = sigma, order = 9))))
+}
+
+sigma.hat <- 1
+theta.hat <- mle.frailty$par
+
+for(i in 1:2){
+  sigma.hat <- nlminb(sigma.hat, function(x) -llik.frailty.sigma(theta.hat, data = dati.prova, x))$par
+  theta.hat <- nlminb(theta.hat, function(x) -llik.frailty.sigma(x, data = dati.prova, sigma.hat))$par
+  cat(i, "\n")
+}
+
+
+#Proviamo con l'idea di bruno
+#Ho riutilizzato frailty perchè non serviva ma faceva comodo come partenza
+head(dati.frailty)
+dati.frailty <- as.data.frame(apply(dati.prova, 2, function(x) rep(x, rep(3, 340))))
+Y <- unlist(sapply(1:32, function(x) rep(dati.new[x, 3:5], dati.new[x, 6])))
+dati.frailty$Y <- as.numeric(Y)
+dati.frailty$pred.frailty <- NULL
+dati.frailty$S <- as.factor(names(Y))
+
+dati.frailty$SET <- ifelse(dati.frailty$S == "S1", "Inizio", 0)
+dati.frailty$SET[dati.frailty$S == "S3"] <- ifelse(dati.frailty$S1[dati.frailty$S == "S3"] == 0, "I-normale", "I-anormale")
+dati.frailty$SET[dati.frailty$S == "S4"] <- paste(dati.frailty$S1[dati.frailty$S == "S4"], dati.frailty$S3[dati.frailty$S == "S4"], sep = "")
+
+mod1 <- glm(Y ~ Gravità*Trattamento*SET, data = dati.frailty, family = "binomial")
+summary(mod1)
+length(mod1$coefficients)
+
+library(MASS)
+search.opt <- stepAIC(mod1, direction = "both")
+bothways <- step(mod1, direction = "both")
